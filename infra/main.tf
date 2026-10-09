@@ -8,6 +8,7 @@ locals {
       proyecto         = var.nombre_app
       ambiente         = var.ambiente
       "gestionado-por" = "terraform"
+      repositorio      = "taller-cicd-azure"
     },
     var.etiquetas_extra,
   )
