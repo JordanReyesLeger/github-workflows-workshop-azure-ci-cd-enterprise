@@ -1,9 +1,9 @@
-name: 01 · Integración continua (aplicación)
+name: 01 · App · integración continua
 
 on:
   pull_request:
     branches: ["main"]
-  # Lo llama también el despliegue (03), así hay UNA sola definición de "construir".
+  # Lo llama también el despliegue (04), así hay UNA sola definición de "construir".
   workflow_call:
   workflow_dispatch:
 

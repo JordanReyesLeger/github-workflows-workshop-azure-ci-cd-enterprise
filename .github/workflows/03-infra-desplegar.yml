@@ -1,0 +1,41 @@
+name: 03 · Infra · desplegar (dev → prod)
+
+# Pipeline de INFRAESTRUCTURA: solo corre cuando cambia Terraform.
+# Va por separado del de la aplicación (04): distinto ritmo, distinto riesgo, distinto revisor.
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "infra/**"
+      - ".github/actions/terraform-init/**"
+      - ".github/workflows/03-infra-desplegar.yml"
+      - ".github/workflows/infra-ambiente.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Un cambio de infraestructura a la vez; nunca se cancela un apply a mitad.
+concurrency:
+  group: infra-desplegar
+  cancel-in-progress: false
+
+jobs:
+  dev:
+    name: dev
+    uses: ./.github/workflows/infra-ambiente.yml
+    with:
+      ambiente: dev
+    permissions:
+      contents: read
+      id-token: write
+
+  prod:
+    name: prod
+    needs: dev
+    uses: ./.github/workflows/infra-ambiente.yml
+    with:
+      ambiente: prod
+    permissions:
+      contents: read
+      id-token: write

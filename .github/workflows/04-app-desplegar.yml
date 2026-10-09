@@ -1,0 +1,45 @@
+name: 04 · App · construir y desplegar (dev → prod)
+
+# Pipeline de APLICACIÓN: solo corre cuando cambia la web. No toca Terraform.
+# Requiere que la infraestructura exista (03 · Infra · desplegar).
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "app/**"
+      - ".github/workflows/01-app-integracion-continua.yml"
+      - ".github/workflows/04-app-desplegar.yml"
+      - ".github/workflows/app-ambiente.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-desplegar
+  cancel-in-progress: false
+
+jobs:
+  construir:
+    name: Construir y probar
+    uses: ./.github/workflows/01-app-integracion-continua.yml
+
+  dev:
+    name: dev
+    needs: construir
+    uses: ./.github/workflows/app-ambiente.yml
+    with:
+      ambiente: dev
+    permissions:
+      contents: read
+      id-token: write
+
+  prod:
+    name: prod
+    needs: dev
+    uses: ./.github/workflows/app-ambiente.yml
+    with:
+      ambiente: prod
+    permissions:
+      contents: read
+      id-token: write

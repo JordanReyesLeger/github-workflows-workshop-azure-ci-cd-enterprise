@@ -1,0 +1,108 @@
+name: App · desplegar ambiente (reutilizable)
+
+# Solo aplicación. NO ejecuta Terraform: la infraestructura ya existe (la crea 03-infra-desplegar).
+# Lo llama 04-app-desplegar.yml una vez por ambiente.
+on:
+  workflow_call:
+    inputs:
+      ambiente:
+        description: dev o prod
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  NOMBRE_APP: ${{ vars.NOMBRE_APP || 'contosobiker' }}
+
+jobs:
+  publicar:
+    name: Publicar ${{ inputs.ambiente }}
+    runs-on: ubuntu-latest
+
+    environment:
+      name: ${{ inputs.ambiente }}
+      url: ${{ steps.destino.outputs.url }}
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v7
+
+      - name: Descargar el sitio construido
+        uses: actions/download-artifact@v8
+        with:
+          name: sitio-web
+          path: app/dist
+
+      - name: Iniciar sesión en Azure (OIDC)
+        uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # El contrato entre los dos pipelines es el nombre del grupo: rg-<app>-<ambiente>.
+      # Así la app no depende de cómo Terraform nombre la cuenta.
+      - name: Localizar el destino en Azure
+        id: destino
+        env:
+          GRUPO: rg-${{ env.NOMBRE_APP }}-${{ inputs.ambiente }}
+        run: |
+          cuenta="$(az storage account list --resource-group "$GRUPO" --query "[0].name" -o tsv)"
+          url="$(az storage account list --resource-group "$GRUPO" --query "[0].primaryEndpoints.web" -o tsv)"
+          if [ -z "$cuenta" ] || [ -z "$url" ]; then
+            echo "::error::No hay sitio en $GRUPO. Ejecuta primero '03 · Infra · desplegar'."
+            exit 1
+          fi
+          echo "cuenta=$cuenta" >> "$GITHUB_OUTPUT"
+          echo "url=${url%/}" >> "$GITHUB_OUTPUT"
+
+      # El paquete es el mismo en dev y prod; solo cambia este archivo.
+      - name: Escribir la configuración del ambiente
+        run: |
+          VERSION="$(node -p "require('./app/package.json').version.split('.').slice(0, 2).join('.')").${{ github.run_number }}"
+          node app/scripts/escribir-config.mjs "${{ inputs.ambiente }}" "$VERSION" "${{ github.sha }}"
+
+      - name: Publicar el sitio en Azure Storage
+        env:
+          CUENTA: ${{ steps.destino.outputs.cuenta }}
+        run: |
+          az storage blob upload-batch \
+            --account-name "$CUENTA" \
+            --destination '$web' \
+            --source app/dist \
+            --auth-mode login \
+            --overwrite true \
+            --output none
+
+      - name: Prueba de humo
+        env:
+          URL: ${{ steps.destino.outputs.url }}
+          AMBIENTE: ${{ inputs.ambiente }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          esperado="${COMMIT:0:7}"
+          for intento in $(seq 1 12); do
+            config="$(curl -fsS "$URL/config.json" || true)"
+            if [ "$(echo "$config" | jq -r '.ambiente // empty')" = "$AMBIENTE" ] \
+               && [ "$(echo "$config" | jq -r '.commit // empty')" = "$esperado" ] \
+               && curl -fsS "$URL/" | grep -q "Contoso Biker"; then
+              echo "✅ $URL responde con el ambiente $AMBIENTE y el commit $esperado"
+              {
+                echo "### 🚀 Publicado en \`$AMBIENTE\`"
+                echo ""
+                echo "- 🌐 $URL"
+                echo "- 🔖 commit \`$esperado\`"
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "Intento $intento: el sitio aún no responde con lo esperado..."
+            sleep 10
+          done
+          echo "::error::La prueba de humo falló en $URL"
+          exit 1

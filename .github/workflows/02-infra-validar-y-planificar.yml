@@ -1,4 +1,4 @@
-name: 02 · Terraform (validar y planificar)
+name: 02 · Infra · validar y planificar
 
 on:
   pull_request:

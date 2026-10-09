@@ -1,0 +1,119 @@
+name: Infra · desplegar ambiente (reutilizable)
+
+# Solo infraestructura. No sabe nada de la aplicación: crea y mantiene los recursos de Azure.
+# Lo llama 03-infra-desplegar.yml una vez por ambiente.
+on:
+  workflow_call:
+    inputs:
+      ambiente:
+        description: dev o prod
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  ARM_USE_OIDC: "true"
+  ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  TFSTATE_RESOURCE_GROUP: ${{ vars.TFSTATE_RESOURCE_GROUP }}
+  TFSTATE_STORAGE_ACCOUNT: ${{ vars.TFSTATE_STORAGE_ACCOUNT }}
+  TFSTATE_CONTAINER: ${{ vars.TFSTATE_CONTAINER }}
+  TF_VAR_suscripcion_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  TF_VAR_nombre_app: ${{ vars.NOMBRE_APP || 'contosobiker' }}
+  TF_VAR_ubicacion: ${{ vars.UBICACION || 'eastus2' }}
+  TF_VAR_etiquetas_extra: ${{ vars.ETIQUETAS_EXTRA || '{}' }}
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+
+jobs:
+  planificar:
+    name: Planificar ${{ inputs.ambiente }}
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v7
+
+      - name: Terraform init
+        uses: ./.github/actions/terraform-init
+        with:
+          ambiente: ${{ inputs.ambiente }}
+
+      - name: Terraform plan
+        working-directory: infra
+        run: |
+          terraform plan -no-color \
+            -var-file="environments/${{ inputs.ambiente }}.tfvars" \
+            -out=tfplan
+          terraform show -no-color tfplan > plan.txt
+
+      - name: Resumen del plan
+        working-directory: infra
+        run: |
+          {
+            echo "### 🧱 Plan · \`${{ inputs.ambiente }}\`"
+            echo ""
+            echo '```text'
+            tail -c 20000 plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Lo que se aprueba es ESTE plan. El apply ejecuta este mismo archivo,
+      # no calcula uno nuevo: lo que el aprobador vio es lo que se aplica.
+      - name: Guardar el plan
+        uses: actions/upload-artifact@v7
+        with:
+          name: tfplan-${{ inputs.ambiente }}
+          path: infra/tfplan
+          if-no-files-found: error
+          retention-days: 5
+
+  aplicar:
+    name: Aplicar ${{ inputs.ambiente }}
+    needs: planificar
+    runs-on: ubuntu-latest
+
+    # Aquí actúan las reglas del entorno: aprobadores y ramas permitidas.
+    # El token OIDC lleva el nombre del entorno y Azure solo lo acepta si coincide.
+    environment:
+      name: ${{ inputs.ambiente }}
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v7
+
+      - name: Descargar el plan aprobado
+        uses: actions/download-artifact@v8
+        with:
+          name: tfplan-${{ inputs.ambiente }}
+          path: infra
+
+      - name: Terraform init
+        uses: ./.github/actions/terraform-init
+        with:
+          ambiente: ${{ inputs.ambiente }}
+
+      - name: Terraform apply
+        working-directory: infra
+        run: terraform apply -no-color tfplan
+
+      - name: Resumen
+        working-directory: infra
+        run: |
+          {
+            echo "### ✅ Infraestructura aplicada · \`${{ inputs.ambiente }}\`"
+            echo ""
+            echo "- 🌐 $(terraform output -raw url_sitio)"
+            echo "- 📦 grupo \`$(terraform output -raw grupo_recursos)\`"
+          } >> "$GITHUB_STEP_SUMMARY"
