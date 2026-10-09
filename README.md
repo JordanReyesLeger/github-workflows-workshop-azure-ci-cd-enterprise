@@ -30,7 +30,7 @@
 | 1️⃣ | [Módulo 1 · Conectar GitHub con Azure sin secretos (OIDC)](#1️⃣-módulo-1--conectar-github-con-azure-sin-secretos-oidc) | 15 min |
 | 2️⃣ | [Módulo 2 · Entornos dev y prod con aprobador](#2️⃣-módulo-2--entornos-dev-y-prod-con-aprobador) | 10 min |
 | 3️⃣ | [Módulo 3 · Proteger main](#3️⃣-módulo-3--proteger-main) | 10 min |
-| 4️⃣ | [Módulo 4 · Tu primer despliegue](#4️⃣-módulo-4--tu-primer-despliegue) | 20 min |
+| 4️⃣ | [Módulo 4 · Tus primeros despliegues](#4️⃣-módulo-4--tus-primeros-despliegues) | 20 min |
 | 5️⃣ | [Módulo 5 · Cambiar con Copilot, por Pull Request](#5️⃣-módulo-5--cambiar-con-copilot-por-pull-request) | 20 min |
 | 6️⃣ | [Módulo 6 · Romperlo a propósito](#6️⃣-módulo-6--romperlo-a-propósito) | 10 min |
 | 🧹 | [Limpieza](#-limpieza) | 3 min |
@@ -46,6 +46,7 @@
 | 🔐 | Autenticación **OIDC**: GitHub entra a Azure **sin contraseñas ni secretos** |
 | 🧱 | Infraestructura como código con **Terraform**, con estado remoto en Azure |
 | 🔍 | En cada PR: **pruebas, `fmt`, `validate`, escaneo de seguridad (checkov) y `plan` comentado** |
+| 🧩 | **Dos pipelines separados**: uno de **infraestructura** (Terraform) y otro de **aplicación** (CI/CD de la web), cada uno por ambiente |
 | 📦 | **Construir una sola vez** y desplegar el mismo paquete en **dev** y **prod** |
 | 🚦 | **prod** con **aprobador** y solo desde `main`; se aplica **el plan que se aprobó** |
 | 🩺 | **Prueba de humo** automática después de cada despliegue |
@@ -57,21 +58,45 @@ La app es **Contoso Biker**: una web estática (HTML/CSS/JS) publicada en un **A
 
 ## 🗺️ Cómo está armado
 
+### 🧩 Dos pipelines, dos ritmos
+
+La buena práctica es **no mezclar** la infraestructura con el despliegue de la aplicación: cambian con distinta frecuencia, tienen distinto riesgo y suelen revisarlos personas distintas.
+
+| | 🧱 Pipeline de **infraestructura** | 🌐 Pipeline de **aplicación** |
+|---|---|---|
+| Se dispara con | Cambios en `infra/**` | Cambios en `app/**` |
+| Qué hace | `plan` → aprobación → `apply` por ambiente | Pruebas → build → publicar → prueba de humo |
+| Frecuencia | Rara | Frecuente |
+| Herramienta | Terraform | `az storage blob upload-batch` |
+| Workflows | `02` (PR) · `03` (main) | `01` (PR) · `04` (main) |
+| Contrato entre ambos | El grupo de recursos `rg-<app>-<ambiente>` | Lo localiza por ese nombre; **no ejecuta Terraform** |
+
 ```mermaid
-flowchart LR
-    PR["📝 Pull Request"] --> CI["01 · CI<br/>pruebas + build"]
-    PR --> TF["02 · Terraform<br/>fmt · validate · checkov · plan"]
-    CI --> M{"✅ merge a main"}
-    TF --> M
-    M --> B["🔨 Construir paquete"]
-    B --> D["🧪 dev<br/>plan → apply → publicar → humo"]
-    D --> A{"👤 Aprobador"}
-    A --> P["🚀 prod<br/>plan → apply → publicar → humo"]
-    style B fill:#2088FF,color:#fff
-    style D fill:#2DA44E,color:#fff
-    style A fill:#BF8700,color:#fff
-    style P fill:#CF222E,color:#fff
+flowchart TB
+    subgraph INFRA["🧱 Infraestructura · infra/**"]
+      direction LR
+      I1["02 · PR<br/>fmt · validate · checkov · plan"] --> I2{"merge"}
+      I2 --> I3["03 · dev<br/>plan → apply"]
+      I3 --> I4{"👤 Aprobador"}
+      I4 --> I5["03 · prod<br/>plan → apply"]
+    end
+    subgraph APP["🌐 Aplicación · app/**"]
+      direction LR
+      A1["01 · PR<br/>pruebas + build"] --> A2{"merge"}
+      A2 --> A3["04 · Construir<br/>(una vez)"]
+      A3 --> A4["dev<br/>publicar → humo"]
+      A4 --> A5{"👤 Aprobador"}
+      A5 --> A6["prod<br/>publicar → humo"]
+    end
+    INFRA -. "crea el sitio" .-> APP
+    style I3 fill:#2DA44E,color:#fff
+    style I5 fill:#CF222E,color:#fff
+    style A4 fill:#2DA44E,color:#fff
+    style A6 fill:#CF222E,color:#fff
 ```
+
+> [!IMPORTANT]
+> **El orden importa la primera vez:** primero la infraestructura (03), luego la aplicación (04). Si despliegas la app sin infraestructura, el pipeline falla con un mensaje claro: *"No hay sitio en rg-…. Ejecuta primero 03"*.
 
 ```text
 .
@@ -83,12 +108,14 @@ flowchart LR
 └── .github/
     ├── actions/terraform-init/  Action local reutilizable
     └── workflows/
-        ├── 01-integracion-continua.yml        Pruebas y paquete de la web
-        ├── 02-terraform-validar-y-planificar.yml   Validación y plan en PR
-        ├── 03-desplegar.yml                   dev → prod (orquestador)
-        ├── desplegar-ambiente.yml             Workflow reutilizable (un ambiente)
-        ├── 04-destruir.yml                    Limpieza manual con confirmación
-        └── 05-deteccion-drift.yml             Extra: ¿alguien cambió Azure a mano?
+        ├── 01-app-integracion-continua.yml      🌐 Pruebas y paquete de la web (PR)
+        ├── 02-infra-validar-y-planificar.yml    🧱 fmt, validate, checkov y plan (PR)
+        ├── 03-infra-desplegar.yml               🧱 dev → prod, solo Terraform
+        ├── 04-app-desplegar.yml                 🌐 construir → dev → prod, solo la web
+        ├── 05-destruir.yml                      🧱 Limpieza manual con confirmación
+        ├── 06-deteccion-drift.yml               🧱 Extra: ¿alguien cambió Azure a mano?
+        ├── infra-ambiente.yml                   🧱 Reutilizable: plan + apply de UN ambiente
+        └── app-ambiente.yml                     🌐 Reutilizable: publicar UN ambiente
 ```
 
 | Ambiente | Replicación | Soft delete | Versionado | Aprobador |
@@ -305,30 +332,40 @@ gh api -X POST repos/MI-ORG/TU-REPO/rulesets --input .github/ruleset-main.json
 
 ---
 
-## 4️⃣ Módulo 4 · Tu primer despliegue
+## 4️⃣ Módulo 4 · Tus primeros despliegues
 
 > ⏱️ **20 minutos** · Hazlo antes del Módulo 3 si es tu primera vez
 
 ### 🎯 Qué vas a lograr
 
-Ver nacer la infraestructura y la web desde cero.
+Ver nacer la infraestructura y, después, la web, cada una con su propio pipeline.
 
-### ▶️ Paso 1 · Dispara el pipeline
+### ▶️ Paso 1 · Primero la infraestructura
 
 ```bash
-gh workflow run 03-desplegar.yml -R MI-ORG/TU-REPO --ref main
+gh workflow run 03-infra-desplegar.yml -R MI-ORG/TU-REPO --ref main
 gh run watch -R MI-ORG/TU-REPO
 ```
 
-### 🔍 Paso 2 · Qué ocurre (y qué mirar)
+| Job | Qué hace | Qué revisar |
+|---|---|---|
+| `dev / Planificar` | `terraform plan` guardado como artefacto | El plan en el *Summary*: `3 to add` |
+| `dev / Aplicar` | `apply` del **plan guardado** | La URL del sitio en el *Summary* |
+| `prod / Planificar` | Plan de prod | Réplica **GRS** y versionado |
+| `prod / Aplicar` | Espera tu **aprobación** | Botón **Review deployments** |
+
+### ▶️ Paso 2 · Después la aplicación
+
+```bash
+gh workflow run 04-app-desplegar.yml -R MI-ORG/TU-REPO --ref main
+gh run watch -R MI-ORG/TU-REPO
+```
 
 | Job | Qué hace | Qué revisar |
 |---|---|---|
 | `Construir y probar` | `npm test` + `npm run build`, sube el artefacto `sitio-web` | Pestaña *Summary* con los archivos |
-| `dev / Planificar` | `terraform plan` guardado como artefacto | El plan en el *Summary*: `3 to add` |
-| `dev / Aplicar y publicar` | `apply` del **plan guardado**, escribe `config.json`, sube a `$web`, **prueba de humo** | La URL aparece en el entorno del run |
-| `prod / Planificar` | Plan de prod | Réplica **GRS** y versionado |
-| `prod / Aplicar y publicar` | Espera tu **aprobación** | Botón **Review deployments** |
+| `dev / Publicar` | Localiza el sitio, escribe `config.json`, sube a `$web`, **prueba de humo** | La URL aparece en el entorno del run |
+| `prod / Publicar` | Espera tu **aprobación** | Botón **Review deployments** |
 
 Aprueba `prod` y abre las dos URLs (están en el resumen y en **Environments**). Cada página muestra su **ambiente, versión y commit**, escritos por el pipeline.
 
@@ -337,7 +374,9 @@ Aprueba `prod` y abre las dos URLs (están en el resumen y en **Environments**).
 | Decisión | Razón |
 |---|---|
 | **Plan separado del apply** | Lo que se aprueba es el plan; el `apply` ejecuta ese archivo. Si algo cambia entre medias, Terraform responde `Saved plan is stale` y se niega: seguro, pero vuelve a lanzar el run |
-| **Un workflow reutilizable** (`desplegar-ambiente.yml`) | dev y prod se despliegan **idéntico**; no hay dos copias que diverjan |
+| **Dos pipelines separados** | Un cambio de CSS no ejecuta Terraform; un cambio de infraestructura no republica la web. Menos riesgo, menos espera y revisores distintos (ver `CODEOWNERS`) |
+| **Un workflow reutilizable por pipeline** (`infra-ambiente.yml`, `app-ambiente.yml`) | dev y prod se despliegan **idéntico**; no hay dos copias que diverjan |
+| **`concurrency` separada** (`infra-desplegar` / `app-desplegar`) | Un despliegue de app no espera a uno de infraestructura, pero nunca hay dos `apply` a la vez |
 | **Artefacto único `sitio-web`** | Se construye una vez; lo que probaste en dev es lo que llega a prod |
 | **`concurrency` sin cancelar** | Nunca se interrumpe un `apply` a la mitad |
 | **Estado por ambiente** (`dev.tfstate`, `prod.tfstate`) | Destruir dev no toca prod |
@@ -391,7 +430,14 @@ gh pr create --fill --base main
 > [!WARNING]
 > **Lee el plan siempre.** Un cambio de una línea puede decir `-/+ destroy and then create replacement`. Esa es la señal de que se **recrearía** un recurso (y en Storage, perdería datos). Para eso existe el comentario en el PR.
 
-Haz **merge (squash)**. Se lanza `03 · Desplegar`: dev solo; prod cuando apruebes. Refresca las URLs: el precio y la **versión** (`1.0.N`) cambiaron.
+Haz **merge (squash)**. Cada cambio lanza **solo su pipeline** (gracias a los filtros `paths`):
+
+| Cambiaste | Se lanza | No se lanza |
+|---|---|---|
+| `app/**` (el precio) | `04 · App` → dev solo; prod cuando apruebes | `03 · Infra` |
+| `infra/**` (la etiqueta) | `03 · Infra` → dev solo; prod cuando apruebes | `04 · App` |
+
+Refresca las URLs: el precio y la **versión** (`1.0.N`) cambiaron. Si cambiaste ambos en un mismo PR, corren los dos, en paralelo.
 
 ---
 
@@ -414,7 +460,7 @@ En `app/src/index.html` borra `id="dato-commit"`. `Construir y probar` falla: la
 En el portal de Azure cambia a mano una etiqueta del grupo `rg-<app>-dev`. Lanza el extra `05 · Detección de drift`: falla y te dice que Azure difiere del código.
 
 ```bash
-gh workflow run 05-deteccion-drift.yml -R MI-ORG/TU-REPO
+gh workflow run 06-deteccion-drift.yml -R MI-ORG/TU-REPO
 ```
 
 ### 🧠 Qué se aprendió
@@ -436,8 +482,8 @@ gh workflow run 05-deteccion-drift.yml -R MI-ORG/TU-REPO
 Para no dejar recursos facturando:
 
 ```bash
-gh workflow run 04-destruir.yml -R MI-ORG/TU-REPO -f ambiente=dev  -f confirmar=dev
-gh workflow run 04-destruir.yml -R MI-ORG/TU-REPO -f ambiente=prod -f confirmar=prod
+gh workflow run 05-destruir.yml -R MI-ORG/TU-REPO -f ambiente=dev  -f confirmar=dev
+gh workflow run 05-destruir.yml -R MI-ORG/TU-REPO -f ambiente=prod -f confirmar=prod
 ```
 
 `prod` pedirá aprobación. Después elimina el estado y la identidad:
@@ -457,6 +503,7 @@ Los roles asignados a esa identidad desaparecen con ella. Coste aproximado del t
 |---|---|---|
 | `AADSTS700213: No matching federated identity record … subject 'repo:ORG@id/REPO@id:…'` | La credencial federada no coincide con el subject real | Vuelve a ejecutar `bootstrap-azure` (lo consulta y **actualiza** las credenciales) |
 | `AADSTS700213 … environment:prod` | Falta la credencial del entorno o el job no declara `environment:` | Revisa que existan las 4 credenciales y el nombre del entorno |
+| `No hay sitio en rg-…` al desplegar la app | La infraestructura aún no existe en ese ambiente | Ejecuta primero `03 · Infra · desplegar` |
 | `Saved plan is stale` | El estado de Azure cambió entre el plan y el apply | Relanza el workflow: genera un plan nuevo |
 | `Error: Failed to get existing workspaces … 403` | Falta `Storage Blob Data Contributor` o aún no propagó | Espera 1–2 min y relanza |
 | `request may be blocked by network rules` / `RequestDisallowedByPolicy` | Una *Azure Policy* bloquea la red pública o falta una etiqueta | Mira [Módulo 1](#1️⃣-módulo-1--conectar-github-con-azure-sin-secretos-oidc) (aviso de política) |

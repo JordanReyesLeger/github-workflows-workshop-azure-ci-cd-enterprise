@@ -1,4 +1,4 @@
-name: 05 · Detección de drift (extra)
+name: 06 · Infra · detección de drift (extra)
 
 # Compara lo que dice el código con lo que existe en Azure. Si alguien cambió algo a mano
 # en el portal, este workflow falla y te avisa.

@@ -1,4 +1,4 @@
-name: 04 · Destruir un ambiente
+name: 05 · Infra · destruir un ambiente
 
 # Solo manual. Sirve para no dejar recursos (ni facturas) al terminar el taller.
 on:
