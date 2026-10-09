@@ -91,15 +91,23 @@ if (-not $spId) {
     $spId = Invoke-Az ad sp create --id $clientId --query id -o tsv
 }
 
-$subjects = [ordered]@{
-    'github-pull-request' = "repo:${Repositorio}:pull_request"
-    'github-rama-main'    = "repo:${Repositorio}:ref:refs/heads/main"
-    'github-entorno-dev'  = "repo:${Repositorio}:environment:dev"
-    'github-entorno-prod' = "repo:${Repositorio}:environment:prod"
+# GitHub puede emitir el "subject" con IDs inmutables (repo:ORG@id/REPO@id) en vez de nombres.
+# Se lo preguntamos al repositorio para que la credencial coincida exactamente con lo que llegue.
+$prefijo = "repo:$Repositorio"
+if (Get-Command gh -ErrorAction SilentlyContinue) {
+    $consultado = (& gh api "repos/$Repositorio/actions/oidc/customization/sub" --jq .sub_claim_prefix 2>$null)
+    if ($LASTEXITCODE -eq 0 -and $consultado) { $prefijo = $consultado.Trim() }
 }
-$existentes = (Invoke-Az ad app federated-credential list --id $objetoApp --query '[].name' -o tsv) -split "`n"
+Write-Host "Subject OIDC: $prefijo"
+
+$subjects = [ordered]@{
+    'github-pull-request' = "${prefijo}:pull_request"
+    'github-rama-main'    = "${prefijo}:ref:refs/heads/main"
+    'github-entorno-dev'  = "${prefijo}:environment:dev"
+    'github-entorno-prod' = "${prefijo}:environment:prod"
+}
+$existentes = (Invoke-Az ad app federated-credential list --id $objetoApp --query '[].name' -o tsv) -split "`n" | ForEach-Object { $_.Trim() }
 foreach ($nombre in $subjects.Keys) {
-    if ($existentes -contains $nombre) { Write-Host "  = $nombre (ya existía)"; continue }
     $cuerpo = @{
         name      = $nombre
         issuer    = 'https://token.actions.githubusercontent.com'
@@ -108,9 +116,17 @@ foreach ($nombre in $subjects.Keys) {
     } | ConvertTo-Json
     $archivo = New-TemporaryFile
     Set-Content -Path $archivo -Value $cuerpo
-    try { Invoke-Az ad app federated-credential create --id $objetoApp --parameters "@$archivo" | Out-Null }
+    try {
+        if ($existentes -contains $nombre) {
+            Invoke-Az ad app federated-credential update --id $objetoApp --federated-credential-id $nombre --parameters "@$archivo" | Out-Null
+            Write-Host "  ~ $nombre -> $($subjects[$nombre])"
+        }
+        else {
+            Invoke-Az ad app federated-credential create --id $objetoApp --parameters "@$archivo" | Out-Null
+            Write-Host "  + $nombre -> $($subjects[$nombre])"
+        }
+    }
     finally { Remove-Item $archivo -Force }
-    Write-Host "  + $nombre -> $($subjects[$nombre])"
 }
 
 # ---------------------------------------------------------------- Roles

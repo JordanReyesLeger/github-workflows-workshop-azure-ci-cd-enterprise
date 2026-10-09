@@ -85,22 +85,35 @@ OBJETO_APP="$(az ad app show --id "$CLIENT_ID" --query id -o tsv)"
 SP_ID="$(az ad sp list --filter "appId eq '$CLIENT_ID'" --query '[0].id' -o tsv)"
 [ -n "$SP_ID" ] || SP_ID="$(az ad sp create --id "$CLIENT_ID" --query id -o tsv)"
 
-EXISTENTES="$(az ad app federated-credential list --id "$OBJETO_APP" --query '[].name' -o tsv)"
+EXISTENTES="$(az ad app federated-credential list --id "$OBJETO_APP" --query '[].name' -o tsv | tr -d '\r')"
+
+# GitHub puede emitir el "subject" con IDs inmutables (repo:ORG@id/REPO@id) en vez de nombres.
+# Se lo preguntamos al repositorio para que la credencial coincida exactamente con lo que llegue.
+PREFIJO="repo:${REPO}"
+if command -v gh >/dev/null 2>&1; then
+  CONSULTADO="$(gh api "repos/${REPO}/actions/oidc/customization/sub" --jq .sub_claim_prefix 2>/dev/null || true)"
+  [ -z "$CONSULTADO" ] || PREFIJO="$CONSULTADO"
+fi
+echo "Subject OIDC: $PREFIJO"
+
 credencial() {
-  local nombre="$1" subject="$2"
-  if grep -qx "$nombre" <<<"$EXISTENTES"; then echo "  = $nombre (ya existia)"; return; fi
-  local archivo
+  local nombre="$1" subject="$2" archivo
   archivo="$(mktemp)"
   printf '{"name":"%s","issuer":"https://token.actions.githubusercontent.com","subject":"%s","audiences":["api://AzureADTokenExchange"]}' \
     "$nombre" "$subject" > "$archivo"
-  az ad app federated-credential create --id "$OBJETO_APP" --parameters "@$archivo" -o none
+  if grep -qx "$nombre" <<<"$EXISTENTES"; then
+    az ad app federated-credential update --id "$OBJETO_APP" --federated-credential-id "$nombre" --parameters "@$archivo" -o none
+    echo "  ~ $nombre -> $subject"
+  else
+    az ad app federated-credential create --id "$OBJETO_APP" --parameters "@$archivo" -o none
+    echo "  + $nombre -> $subject"
+  fi
   rm -f "$archivo"
-  echo "  + $nombre -> $subject"
 }
-credencial github-pull-request "repo:${REPO}:pull_request"
-credencial github-rama-main    "repo:${REPO}:ref:refs/heads/main"
-credencial github-entorno-dev  "repo:${REPO}:environment:dev"
-credencial github-entorno-prod "repo:${REPO}:environment:prod"
+credencial github-pull-request "${PREFIJO}:pull_request"
+credencial github-rama-main    "${PREFIJO}:ref:refs/heads/main"
+credencial github-entorno-dev  "${PREFIJO}:environment:dev"
+credencial github-entorno-prod "${PREFIJO}:environment:prod"
 
 # ---------------------------------------------------------------- Roles
 paso "Roles del pipeline"
