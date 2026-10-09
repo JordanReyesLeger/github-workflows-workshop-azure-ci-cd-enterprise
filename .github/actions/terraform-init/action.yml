@@ -1,0 +1,29 @@
+name: Terraform init
+description: Instala Terraform e inicializa el backend remoto (estado en Azure Storage) del ambiente indicado.
+
+inputs:
+  ambiente:
+    description: dev o prod. Cada ambiente tiene su propio archivo de estado.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Instalar Terraform
+      uses: hashicorp/setup-terraform@v4
+      with:
+        terraform_version: "~> 1.11.0"
+        # Sin el wrapper, la salida de terraform llega limpia a archivos y a `terraform output -raw`.
+        terraform_wrapper: false
+
+    - name: Terraform init (${{ inputs.ambiente }})
+      shell: bash
+      working-directory: infra
+      env:
+        AMBIENTE: ${{ inputs.ambiente }}
+      run: |
+        terraform init \
+          -backend-config="resource_group_name=${TFSTATE_RESOURCE_GROUP}" \
+          -backend-config="storage_account_name=${TFSTATE_STORAGE_ACCOUNT}" \
+          -backend-config="container_name=${TFSTATE_CONTAINER}" \
+          -backend-config="key=${AMBIENTE}.tfstate"

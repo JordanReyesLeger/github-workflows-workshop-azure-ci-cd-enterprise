@@ -1,0 +1,17 @@
+# Personas o equipos que revisan por omisión cualquier cambio del repositorio.
+# Reemplaza @TU_USUARIO antes del Módulo 3.
+#
+# En una organización es mejor usar EQUIPOS que personas: si pones a alguien
+# concreto, el día que esté de vacaciones bloquea a todo el mundo.
+#
+#   *                       @mi-org/mi-equipo
+#   /infra/                 @mi-org/plataforma
+#
+# El equipo debe tener acceso de ESCRITURA al repositorio. Si no lo tiene,
+# GitHub ignora la línea en silencio.
+
+*                       @TU_USUARIO
+
+# La infraestructura y los pipelines son código que toca producción: siempre se revisan.
+/infra/                 @TU_USUARIO
+/.github/               @TU_USUARIO

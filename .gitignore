@@ -1,0 +1,26 @@
+# Terraform: nunca se versiona el estado ni los planes (pueden contener datos sensibles).
+# El archivo .terraform.lock.hcl SÍ se versiona: fija las versiones de los proveedores.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+plan.txt
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*.auto.tfvars
+terraform.tfvars
+
+# Aplicación
+node_modules/
+app/dist/
+
+# Herramientas
+.vscode/
+.idea/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db

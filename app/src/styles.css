@@ -1,0 +1,135 @@
+:root {
+  --azul: #0b5fff;
+  --oscuro: #0d1b2a;
+  --claro: #f4f7fb;
+  --verde: #2da44e;
+  --ambar: #bf8700;
+  --rojo: #cf222e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--oscuro);
+  background: var(--claro);
+  line-height: 1.5;
+}
+
+.barra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 2rem;
+  background: var(--oscuro);
+  color: #fff;
+}
+
+.logo {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.etiqueta {
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--ambar);
+}
+
+.etiqueta[data-ambiente="prod"] {
+  background: var(--rojo);
+}
+
+.etiqueta[data-ambiente="dev"] {
+  background: var(--verde);
+}
+
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.portada {
+  text-align: center;
+  padding: 2rem 0;
+}
+
+.portada h1 {
+  margin: 0 0 0.5rem;
+  font-size: 2.2rem;
+  color: var(--azul);
+}
+
+.tarjetas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.tarjeta {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.25rem;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
+}
+
+.tarjeta h2 {
+  margin-top: 0;
+}
+
+.precio {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--azul);
+  margin: 0.25rem 0;
+}
+
+.precio small {
+  font-size: 0.9rem;
+  color: #57606a;
+  font-weight: 400;
+}
+
+.despliegue {
+  margin-top: 2rem;
+  background: #fff;
+  border-left: 6px solid var(--azul);
+  border-radius: 8px;
+  padding: 1rem 1.5rem;
+}
+
+.despliegue .nota {
+  color: #57606a;
+  font-size: 0.9rem;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0;
+}
+
+dt {
+  font-weight: 700;
+}
+
+dd {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+footer {
+  text-align: center;
+  padding: 2rem;
+  color: #57606a;
+  font-size: 0.85rem;
+}

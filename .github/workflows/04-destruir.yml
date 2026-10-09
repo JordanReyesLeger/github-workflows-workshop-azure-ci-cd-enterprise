@@ -1,0 +1,59 @@
+name: 04 · Destruir un ambiente
+
+# Solo manual. Sirve para no dejar recursos (ni facturas) al terminar el taller.
+on:
+  workflow_dispatch:
+    inputs:
+      ambiente:
+        description: Ambiente a destruir
+        type: choice
+        options: [dev, prod]
+        required: true
+      confirmar:
+        description: Escribe el nombre del ambiente para confirmar
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  ARM_USE_OIDC: "true"
+  ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  TFSTATE_RESOURCE_GROUP: ${{ vars.TFSTATE_RESOURCE_GROUP }}
+  TFSTATE_STORAGE_ACCOUNT: ${{ vars.TFSTATE_STORAGE_ACCOUNT }}
+  TFSTATE_CONTAINER: ${{ vars.TFSTATE_CONTAINER }}
+  TF_VAR_suscripcion_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  TF_VAR_nombre_app: ${{ vars.NOMBRE_APP || 'contosobiker' }}
+  TF_VAR_ubicacion: ${{ vars.UBICACION || 'eastus2' }}
+  TF_VAR_etiquetas_extra: ${{ vars.ETIQUETAS_EXTRA || '{}' }}
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+
+jobs:
+  destruir:
+    name: Destruir ${{ inputs.ambiente }}
+    runs-on: ubuntu-latest
+    if: inputs.confirmar == inputs.ambiente
+
+    # Pasa por las mismas reglas que el despliegue: destruir prod también pide aprobador.
+    environment: ${{ inputs.ambiente }}
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v7
+
+      - name: Terraform init
+        uses: ./.github/actions/terraform-init
+        with:
+          ambiente: ${{ inputs.ambiente }}
+
+      - name: Terraform destroy
+        working-directory: infra
+        run: terraform destroy -auto-approve -no-color -var-file="environments/${{ inputs.ambiente }}.tfvars"

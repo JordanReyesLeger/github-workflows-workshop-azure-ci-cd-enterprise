@@ -1,0 +1,128 @@
+name: 02 · Terraform (validar y planificar)
+
+on:
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Lo que Terraform necesita para autenticarse (OIDC) y para encontrar su estado.
+  ARM_USE_OIDC: "true"
+  ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  TFSTATE_RESOURCE_GROUP: ${{ vars.TFSTATE_RESOURCE_GROUP }}
+  TFSTATE_STORAGE_ACCOUNT: ${{ vars.TFSTATE_STORAGE_ACCOUNT }}
+  TFSTATE_CONTAINER: ${{ vars.TFSTATE_CONTAINER }}
+  # Variables de Terraform (TF_VAR_x alimenta la variable x).
+  TF_VAR_suscripcion_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  TF_VAR_nombre_app: ${{ vars.NOMBRE_APP || 'contosobiker' }}
+  TF_VAR_ubicacion: ${{ vars.UBICACION || 'eastus2' }}
+  TF_VAR_etiquetas_extra: ${{ vars.ETIQUETAS_EXTRA || '{}' }}
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+
+jobs:
+  validar:
+    name: Formato, validación y seguridad
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v7
+
+      - name: Instalar Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "~> 1.11.0"
+          terraform_wrapper: false
+
+      - name: Formato (terraform fmt)
+        working-directory: infra
+        run: terraform fmt -check -recursive -diff
+
+      - name: Inicializar sin backend
+        working-directory: infra
+        run: terraform init -backend=false
+
+      - name: Validar (terraform validate)
+        working-directory: infra
+        run: terraform validate
+
+      - name: Escaneo de seguridad (checkov)
+        run: pipx run checkov==3.3.* -d infra --framework terraform --compact --quiet
+
+  planificar:
+    name: Plan (${{ matrix.ambiente }})
+    needs: validar
+    runs-on: ubuntu-latest
+    # Los PR desde forks no reciben token OIDC: no hay forma segura de planificar ahí.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        ambiente: [dev, prod]
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v7
+
+      - name: Terraform init
+        uses: ./.github/actions/terraform-init
+        with:
+          ambiente: ${{ matrix.ambiente }}
+
+      # -lock=false: un plan en un PR solo lee. Así dos PR abiertos no se bloquean entre sí.
+      - name: Terraform plan
+        id: plan
+        working-directory: infra
+        run: |
+          terraform plan -lock=false -no-color \
+            -var-file="environments/${{ matrix.ambiente }}.tfvars" \
+            -out=tfplan
+          terraform show -no-color tfplan > plan.txt
+
+      - name: Resumen del plan
+        if: always() && steps.plan.outcome != 'skipped'
+        working-directory: infra
+        run: |
+          {
+            echo "### 🧱 Plan de Terraform · \`${{ matrix.ambiente }}\`"
+            echo ""
+            echo '```text'
+            tail -c 20000 plan.txt 2>/dev/null || echo "El plan falló. Revisa el log del paso anterior."
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comentar el plan en el PR
+        if: github.event_name == 'pull_request' && steps.plan.outcome == 'success'
+        uses: actions/github-script@v9
+        env:
+          AMBIENTE: ${{ matrix.ambiente }}
+        with:
+          script: |
+            const fs = require('fs');
+            const ambiente = process.env.AMBIENTE;
+            const marca = `<!-- plan-terraform-${ambiente} -->`;
+            let plan = fs.readFileSync('infra/plan.txt', 'utf8');
+            if (plan.length > 60000) plan = plan.slice(0, 60000) + '\n... (recortado)';
+            const cuerpo = `${marca}\n### 🧱 Plan de Terraform · \`${ambiente}\`\n\n<details><summary>Ver plan</summary>\n\n\`\`\`text\n${plan}\n\`\`\`\n\n</details>`;
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comentarios = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const previo = comentarios.find((c) => c.body?.startsWith(marca));
+            if (previo) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: previo.id, body: cuerpo });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body: cuerpo });
+            }

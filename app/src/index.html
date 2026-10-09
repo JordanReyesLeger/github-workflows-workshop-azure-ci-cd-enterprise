@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Contoso Biker: renta de bicicletas por día, con descuento semanal." />
+    <title>Contoso Biker · Renta de bicicletas</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="barra">
+      <span class="logo">🚲 Contoso Biker</span>
+      <span id="etiqueta-ambiente" class="etiqueta" hidden></span>
+    </header>
+
+    <main>
+      <section class="portada">
+        <h1>Pedalea hoy, paga lo justo</h1>
+        <p>Renta una bicicleta por día. Desde 7 días, <strong>15 % de descuento</strong>.</p>
+      </section>
+
+      <section class="tarjetas" aria-label="Bicicletas disponibles">
+        <article class="tarjeta">
+          <h2>🚴 Urbana</h2>
+          <p class="precio">$250 <small>/ día</small></p>
+          <p>Ligera y cómoda para moverte por la ciudad.</p>
+        </article>
+        <article class="tarjeta">
+          <h2>🚵 Montaña</h2>
+          <p class="precio">$400 <small>/ día</small></p>
+          <p>Suspensión completa para senderos difíciles.</p>
+        </article>
+        <article class="tarjeta">
+          <h2>⚡ Eléctrica</h2>
+          <p class="precio">$550 <small>/ día</small></p>
+          <p>Asistencia de motor para rutas largas.</p>
+        </article>
+      </section>
+
+      <section class="despliegue" aria-label="Información del despliegue">
+        <h2>📦 Sobre este despliegue</h2>
+        <p class="nota">
+          Esta página se construyó una sola vez en GitHub Actions y se publicó en Azure con
+          Terraform. Estos datos los escribe el pipeline, no el código.
+        </p>
+        <dl>
+          <dt>Ambiente</dt>
+          <dd id="dato-ambiente">…</dd>
+          <dt>Versión</dt>
+          <dd id="dato-version">…</dd>
+          <dt>Commit</dt>
+          <dd id="dato-commit">…</dd>
+          <dt>Publicado</dt>
+          <dd id="dato-fecha">…</dd>
+        </dl>
+      </section>
+    </main>
+
+    <footer>Taller de CI/CD con GitHub Actions, Terraform y Azure</footer>
+    <script src="app.js"></script>
+  </body>
+</html>

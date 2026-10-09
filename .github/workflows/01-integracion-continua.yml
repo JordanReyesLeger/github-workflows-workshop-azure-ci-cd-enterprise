@@ -1,0 +1,56 @@
+name: 01 · Integración continua (aplicación)
+
+on:
+  pull_request:
+    branches: ["main"]
+  # Lo llama también el despliegue (03), así hay UNA sola definición de "construir".
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  VERSION_NODE: "22"
+
+jobs:
+  construir-y-probar:
+    name: Construir y probar
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v7
+
+      - name: Instalar Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.VERSION_NODE }}
+
+      - name: Ejecutar pruebas
+        run: npm test
+
+      - name: Construir el sitio
+        run: npm run build
+
+      - name: Publicar el paquete del sitio
+        uses: actions/upload-artifact@v7
+        with:
+          name: sitio-web
+          path: app/dist
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Resumen
+        run: |
+          {
+            echo "### 🌐 Sitio construido"
+            echo ""
+            echo "| Archivo | Tamaño (bytes) |"
+            echo "|---|---|"
+            for f in dist/*; do echo "| \`$(basename "$f")\` | $(stat -c %s "$f") |"; done
+          } >> "$GITHUB_STEP_SUMMARY"
