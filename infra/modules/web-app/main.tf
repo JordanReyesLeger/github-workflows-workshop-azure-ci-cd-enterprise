@@ -47,6 +47,8 @@ resource "azurerm_linux_web_app" "app" {
     http2_enabled       = true
     minimum_tls_version = "1.2"
     health_check_path   = "/health"
+    # Minutos con fallos antes de sacar la instancia de rotación (mínimo 2).
+    health_check_eviction_time_in_min = 5
 
     application_stack {
       dotnet_version = var.version_dotnet
