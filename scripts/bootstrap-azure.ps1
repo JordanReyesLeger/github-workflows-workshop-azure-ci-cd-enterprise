@@ -18,7 +18,7 @@ param(
     [Parameter(Mandatory)] [ValidatePattern('^[^/\s]+/[^/\s]+$')] [string] $Repositorio,
     [Parameter(Mandatory)] [ValidatePattern('^[0-9a-fA-F-]{36}$')] [string] $SuscripcionId,
     [ValidatePattern('^[a-z0-9]{3,12}$')] [string] $NombreApp = 'contosobiker',
-    [string] $Ubicacion = 'eastus2',
+    [string] $Ubicacion = 'centralus',
     [string[]] $Etiquetas = @(),
     [switch] $OmitirGitHub
 )

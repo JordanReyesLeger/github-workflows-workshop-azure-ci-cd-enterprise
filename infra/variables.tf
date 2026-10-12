@@ -32,27 +32,26 @@ variable "ambiente" {
 variable "ubicacion" {
   description = "Región de Azure."
   type        = string
-  default     = "eastus2"
+  default     = "centralus"
 }
 
-variable "replicacion" {
-  description = "Tipo de replicación de la cuenta de almacenamiento (LRS, GRS, ZRS...)."
+variable "sku_plan" {
+  description = "SKU del plan de App Service (B1, S1, P0v3...)."
   type        = string
-  default     = "LRS"
+  default     = "B1"
 }
 
-variable "dias_retencion_borrado" {
-  description = "Días que se conservan los blobs y contenedores borrados (soft delete)."
-  type        = number
-  default     = 7
-}
-
-variable "habilitar_versionado" {
-  description = "Conserva versiones anteriores de cada archivo publicado."
+variable "siempre_activa" {
+  description = "Mantiene la app cargada aunque no haya tráfico."
   type        = bool
-  default     = false
+  default     = true
 }
 
+variable "version_dotnet" {
+  description = "Versión de .NET del runtime de la Web App."
+  type        = string
+  default     = "10.0"
+}
 variable "etiquetas_extra" {
   description = "Etiquetas adicionales para todos los recursos."
   type        = map(string)

@@ -13,9 +13,13 @@ override.tf.json
 *.auto.tfvars
 terraform.tfvars
 
-# Aplicación
-node_modules/
-app/dist/
+# Aplicación (.NET)
+bin/
+obj/
+publicar/
+app.zip
+TestResults/
+*.user
 
 # Herramientas
 .vscode/

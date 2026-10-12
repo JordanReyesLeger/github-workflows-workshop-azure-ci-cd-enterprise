@@ -1,6 +1,6 @@
 locals {
   # Sufijo determinista: el mismo ambiente siempre da los mismos nombres, y dos
-  # suscripciones distintas no chocan en el espacio global de nombres de Storage.
+  # suscripciones distintas no chocan en el espacio global de nombres de App Service (azurewebsites.net).
   sufijo = substr(sha1("${var.suscripcion_id}-${var.nombre_app}-${var.ambiente}"), 0, 6)
 
   etiquetas = merge(
@@ -20,14 +20,15 @@ resource "azurerm_resource_group" "sitio" {
   tags     = local.etiquetas
 }
 
-module "sitio_web" {
-  source = "./modules/sitio-web"
+module "web_app" {
+  source = "./modules/web-app"
 
-  nombre_cuenta          = "st${var.nombre_app}${var.ambiente}${local.sufijo}"
-  grupo_recursos         = azurerm_resource_group.sitio.name
-  ubicacion              = azurerm_resource_group.sitio.location
-  replicacion            = var.replicacion
-  dias_retencion_borrado = var.dias_retencion_borrado
-  habilitar_versionado   = var.habilitar_versionado
-  etiquetas              = local.etiquetas
+  nombre         = "app-${var.nombre_app}-${var.ambiente}-${local.sufijo}"
+  ambiente       = var.ambiente
+  grupo_recursos = azurerm_resource_group.sitio.name
+  ubicacion      = azurerm_resource_group.sitio.location
+  sku_plan       = var.sku_plan
+  siempre_activa = var.siempre_activa
+  version_dotnet = var.version_dotnet
+  etiquetas      = local.etiquetas
 }

@@ -1,11 +1,11 @@
 output "url_sitio" {
-  description = "Dirección pública del sitio."
-  value       = module.sitio_web.url_sitio
+  description = "Dirección pública de la aplicación."
+  value       = module.web_app.url_sitio
 }
 
-output "nombre_cuenta" {
-  description = "Cuenta de almacenamiento donde se publica el sitio."
-  value       = module.sitio_web.nombre_cuenta
+output "nombre_app" {
+  description = "Nombre de la Web App donde se despliega la aplicación."
+  value       = module.web_app.nombre_app
 }
 
 output "grupo_recursos" {

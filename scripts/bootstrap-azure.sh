@@ -12,14 +12,14 @@
 #   bash scripts/bootstrap-azure.sh ORG/REPO SUSCRIPCION_ID [NOMBRE_APP] [UBICACION] [clave=valor ...]
 #
 # Ejemplo:
-#   bash scripts/bootstrap-azure.sh mi-org/taller-azure-ana 00000000-0000-0000-0000-000000000000 anabiker eastus2
+#   bash scripts/bootstrap-azure.sh mi-org/taller-azure-ana 00000000-0000-0000-0000-000000000000 anabiker centralus
 
 set -euo pipefail
 
 REPO="${1:-}"
 SUSCRIPCION="${2:-}"
 NOMBRE_APP="${3:-contosobiker}"
-UBICACION="${4:-eastus2}"
+UBICACION="${4:-centralus}"
 shift $(( $# < 4 ? $# : 4 ))
 ETIQUETAS=("$@")
 

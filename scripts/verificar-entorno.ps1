@@ -28,11 +28,11 @@ Write-Host "---------------------------------"
 Test-Paso "Git instalado"                 { git --version }
 Test-Paso "GitHub CLI instalado"          { gh --version }
 Test-Paso "Sesion de GitHub CLI"          { gh auth token }
-Test-Paso "Node.js 22 o superior"         { node -e "process.exit(Number(process.versions.node.split('.')[0]) >= 22 ? 0 : 1)" }
+Test-Paso "SDK de .NET 10 o superior"     { dotnet --version }
 Test-Paso "Terraform instalado"           { terraform version }
 Test-Paso "Azure CLI instalado"           { az version }
 Test-Paso "Sesion de Azure CLI"           { az account show }
-Test-Paso "Pruebas de la app"             { npm --prefix app test }
+Test-Paso "Pruebas de la app"             { dotnet test ContosoBiker.sln }
 Test-Paso "Terraform: formato"            { terraform -chdir=infra fmt -check -recursive }
 Test-Paso "Terraform: init sin backend"   { terraform -chdir=infra init -backend=false }
 Test-Paso "Terraform: validate"           { terraform -chdir=infra validate }

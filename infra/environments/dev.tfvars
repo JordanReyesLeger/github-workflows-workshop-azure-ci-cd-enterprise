@@ -1,4 +1,4 @@
-ambiente               = "dev"
-replicacion            = "LRS"
-dias_retencion_borrado = 7
-habilitar_versionado   = false
+ambiente       = "dev"
+sku_plan       = "B1"
+siempre_activa = true
+

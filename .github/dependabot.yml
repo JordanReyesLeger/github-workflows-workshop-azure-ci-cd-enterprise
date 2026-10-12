@@ -18,10 +18,10 @@ updates:
     commit-message:
       prefix: "terraform"
 
-  # La app no tiene dependencias hoy; esto te avisa el día que agregues alguna.
-  - package-ecosystem: "npm"
-    directory: "/app"
+  # Mantiene al día los paquetes NuGet de la app y de sus pruebas.
+  - package-ecosystem: "nuget"
+    directory: "/"
     schedule:
       interval: "weekly"
     commit-message:
-      prefix: "npm"
+      prefix: "nuget"
