@@ -6,7 +6,9 @@ on:
   push:
     branches: ["main"]
     paths:
-      - "app/**"
+      - "src/**"
+      - "tests/**"
+      - "ContosoBiker.sln"
       - ".github/workflows/01-app-integracion-continua.yml"
       - ".github/workflows/04-app-desplegar.yml"
       - ".github/workflows/app-ambiente.yml"

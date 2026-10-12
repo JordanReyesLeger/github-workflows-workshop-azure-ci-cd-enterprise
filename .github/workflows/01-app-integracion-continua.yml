@@ -11,46 +11,60 @@ permissions:
   contents: read
 
 env:
-  VERSION_NODE: "22"
+  VERSION_DOTNET: "10.0.x"
 
 jobs:
   construir-y-probar:
     name: Construir y probar
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: app
-
     steps:
       - name: Descargar el código
         uses: actions/checkout@v7
 
-      - name: Instalar Node.js
-        uses: actions/setup-node@v7
+      - name: Instalar el SDK de .NET
+        uses: actions/setup-dotnet@v6
         with:
-          node-version: ${{ env.VERSION_NODE }}
+          dotnet-version: ${{ env.VERSION_DOTNET }}
+
+      - name: Restaurar dependencias
+        run: dotnet restore ContosoBiker.sln
+
+      - name: Compilar
+        run: dotnet build ContosoBiker.sln --configuration Release --no-restore
 
       - name: Ejecutar pruebas
-        run: npm test
+        run: dotnet test ContosoBiker.sln --configuration Release --no-build
 
-      - name: Construir el sitio
-        run: npm run build
+      - name: Publicar la aplicación
+        run: dotnet publish src/ContosoBiker.Web --configuration Release --no-build --output publicar
 
-      - name: Publicar el paquete del sitio
+      # La versión y el commit viajan DENTRO del paquete: es el mismo paquete en dev y en prod.
+      - name: Estampar la versión y el commit
+        env:
+          COMMIT: ${{ github.sha }}
+          NUMERO: ${{ github.run_number }}
+        run: |
+          printf '{"version":"1.0.%s","commit":"%s"}\n' "$NUMERO" "${COMMIT:0:7}" > publicar/buildinfo.json
+          cat publicar/buildinfo.json
+
+      - name: Empaquetar
+        working-directory: publicar
+        run: zip -qr ../app.zip .
+
+      - name: Guardar el paquete
         uses: actions/upload-artifact@v7
         with:
-          name: sitio-web
-          path: app/dist
+          name: app-web
+          path: app.zip
           if-no-files-found: error
           retention-days: 7
 
       - name: Resumen
         run: |
           {
-            echo "### 🌐 Sitio construido"
+            echo "### 📦 Paquete construido"
             echo ""
-            echo "| Archivo | Tamaño (bytes) |"
-            echo "|---|---|"
-            for f in dist/*; do echo "| \`$(basename "$f")\` | $(stat -c %s "$f") |"; done
+            echo "- Tamaño: $(stat -c %s app.zip) bytes"
+            echo "- \`$(cat publicar/buildinfo.json)\`"
           } >> "$GITHUB_STEP_SUMMARY"

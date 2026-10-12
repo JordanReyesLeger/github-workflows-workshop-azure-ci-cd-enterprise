@@ -1,4 +1,4 @@
-ambiente               = "prod"
-replicacion            = "GRS"
-dias_retencion_borrado = 30
-habilitar_versionado   = true
+ambiente       = "prod"
+sku_plan       = "P0v3"
+siempre_activa = true
+

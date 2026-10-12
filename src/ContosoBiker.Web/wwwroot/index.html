@@ -39,10 +39,7 @@
 
       <section class="despliegue" aria-label="Información del despliegue">
         <h2>📦 Sobre este despliegue</h2>
-        <p class="nota">
-          Esta página se construyó una sola vez en GitHub Actions y se publicó en Azure con
-          Terraform. Estos datos los escribe el pipeline, no el código.
-        </p>
+        <p class="nota">Esta aplicación ASP.NET Core se construyó una sola vez en GitHub Actions y corre en Azure App Service, creado con Terraform. Estos datos los devuelve <code>/api/info</code>.</p>
         <dl>
           <dt>Ambiente</dt>
           <dd id="dato-ambiente">…</dd>
@@ -50,13 +47,16 @@
           <dd id="dato-version">…</dd>
           <dt>Commit</dt>
           <dd id="dato-commit">…</dd>
-          <dt>Publicado</dt>
+          <dt>Runtime</dt>
+          <dd id="dato-runtime">…</dd>
+          <dt>Iniciada</dt>
           <dd id="dato-fecha">…</dd>
         </dl>
       </section>
     </main>
 
-    <footer>Taller de CI/CD con GitHub Actions, Terraform y Azure</footer>
+    <footer>Taller de CI/CD con GitHub Actions, Terraform y Azure App Service</footer>
     <script src="app.js"></script>
   </body>
 </html>
+

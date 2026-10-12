@@ -52,7 +52,7 @@
 | 🩺 | **Prueba de humo** automática después de cada despliegue |
 | 🛡️ | `main` **protegida** con un ruleset |
 
-La app es **Contoso Biker**: una web estática (HTML/CSS/JS) publicada en un **Azure Storage Static Website**. Es sencilla a propósito: el protagonista es el pipeline.
+La app es **Contoso Biker**: una aplicación **ASP.NET Core (.NET 10)** muy sencilla (una página y dos endpoints: `/api/info` y `/health`) publicada en **Azure App Service para Linux**. Es sencilla a propósito: el protagonista es el pipeline.
 
 ---
 
@@ -64,10 +64,10 @@ La buena práctica es **no mezclar** la infraestructura con el despliegue de la 
 
 | | 🧱 Pipeline de **infraestructura** | 🌐 Pipeline de **aplicación** |
 |---|---|---|
-| Se dispara con | Cambios en `infra/**` | Cambios en `app/**` |
+| Se dispara con | Cambios en `infra/**` | Cambios en `src/**` o `tests/**` |
 | Qué hace | `plan` → aprobación → `apply` por ambiente | Pruebas → build → publicar → prueba de humo |
 | Frecuencia | Rara | Frecuente |
-| Herramienta | Terraform | `az storage blob upload-batch` |
+| Herramienta | Terraform | `dotnet` + `az webapp deploy` |
 | Workflows | `02` (PR) · `03` (main) | `01` (PR) · `04` (main) |
 | Contrato entre ambos | El grupo de recursos `rg-<app>-<ambiente>` | Lo localiza por ese nombre; **no ejecuta Terraform** |
 
@@ -80,7 +80,7 @@ flowchart TB
       I3 --> I4{"👤 Aprobador"}
       I4 --> I5["03 · prod<br/>plan → apply"]
     end
-    subgraph APP["🌐 Aplicación · app/**"]
+    subgraph APP["🌐 Aplicación · src/** y tests/**"]
       direction LR
       A1["01 · PR<br/>pruebas + build"] --> A2{"merge"}
       A2 --> A3["04 · Construir<br/>(una vez)"]
@@ -88,7 +88,7 @@ flowchart TB
       A4 --> A5{"👤 Aprobador"}
       A5 --> A6["prod<br/>publicar → humo"]
     end
-    INFRA -. "crea el sitio" .-> APP
+    INFRA -. "crea la Web App" .-> APP
     style I3 fill:#2DA44E,color:#fff
     style I5 fill:#CF222E,color:#fff
     style A4 fill:#2DA44E,color:#fff
@@ -96,13 +96,15 @@ flowchart TB
 ```
 
 > [!IMPORTANT]
-> **El orden importa la primera vez:** primero la infraestructura (03), luego la aplicación (04). Si despliegas la app sin infraestructura, el pipeline falla con un mensaje claro: *"No hay sitio en rg-…. Ejecuta primero 03"*.
+> **El orden importa la primera vez:** primero la infraestructura (03), luego la aplicación (04). Si despliegas la app sin infraestructura, el pipeline falla con un mensaje claro: *"No hay Web App en rg-…. Ejecuta primero 03"*.
 
 ```text
 .
-├── app/                         La web (sin dependencias) + pruebas con node:test
+├── ContosoBiker.sln             Solución .NET
+├── src/ContosoBiker.Web/        La app ASP.NET Core (Program.cs + wwwroot)
+├── tests/ContosoBiker.Web.Tests/  Pruebas xUnit (WebApplicationFactory)
 ├── infra/                       Terraform
-│   ├── modules/sitio-web/       Cuenta de Storage + sitio estático (seguro por omisión)
+│   ├── modules/web-app/         App Service Plan + Linux Web App (seguro por omisión)
 │   └── environments/            dev.tfvars · prod.tfvars  (lo que cambia por ambiente)
 ├── scripts/                     bootstrap-azure (.ps1/.sh) · crear-mi-repo · verificar-entorno
 └── .github/
@@ -118,13 +120,13 @@ flowchart TB
         └── app-ambiente.yml                     🌐 Reutilizable: publicar UN ambiente
 ```
 
-| Ambiente | Replicación | Soft delete | Versionado | Aprobador |
-|---|---|---|---|---|
-| `dev` | LRS | 7 días | no | no |
-| `prod` | GRS | 30 días | sí | **sí** |
+| Ambiente | SKU del plan | Siempre activa | Aprobador |
+|---|---|---|---|
+| `dev` | B1 (básico, barato) | sí | no |
+| `prod` | P0v3 (producción) | sí | **sí** |
 
 > [!NOTE]
-> El mismo código y el mismo paquete van a los dos ambientes. Solo cambian el `.tfvars` y el `config.json` que el pipeline escribe al desplegar.
+> El mismo código y el mismo paquete van a los dos ambientes. Solo cambian el `.tfvars` (SKU) y la *app setting* `AMBIENTE` que Terraform pone en cada Web App.
 
 ---
 
@@ -154,7 +156,7 @@ flowchart TB
 | GitHub CLI | `gh --version` |
 | Azure CLI | `az version` |
 | Terraform ≥ 1.9 | `terraform version` |
-| Node.js ≥ 22 | `node -v` |
+| SDK de .NET 10 | `dotnet --version` |
 
 ```bash
 gh auth login && gh auth setup-git
@@ -162,7 +164,7 @@ az login && az account set --subscription <TU-SUSCRIPCION>
 ./scripts/verificar-entorno.ps1      # o: bash scripts/verificar-entorno.sh
 ```
 
-Para ver la web en local: `cd app; npm run build; npm start` → <http://localhost:8080>.
+Para ver la app en local: `dotnet run --project src/ContosoBiker.Web` → la URL aparece en la consola. Pruebas: `dotnet test ContosoBiker.sln`.
 
 </details>
 
@@ -248,7 +250,7 @@ cuatro credenciales federadas (pull_request, rama main, entorno dev, entorno pro
 En el [portal de Azure](https://portal.azure.com):
 
 1. Busca **Storage accounts** → **Create**.
-2. **Basics**: suscripción tuya; **Resource group** → *Create new* → `rg-tfstate-<NOMBREAPP>`; **Storage account name** → `sttf<nombreapp><3 letras al azar>` (solo minúsculas y números, global y único); **Region** `East US 2`; **Performance** Standard; **Redundancy** **LRS**.
+2. **Basics**: suscripción tuya; **Resource group** → *Create new* → `rg-tfstate-<NOMBREAPP>`; **Storage account name** → `sttf<nombreapp><3 letras al azar>` (solo minúsculas y números, global y único); **Region** `Central US`; **Performance** Standard; **Redundancy** **LRS**.
 3. **Advanced**: ✅ *Require secure transfer*, **Minimum TLS version 1.2**, ❌ **desmarca** *Allow enabling anonymous access on individual containers*, ❌ **desmarca** *Allow storage account key access*.
 4. **Networking**: *Public network access* → **Enable** (selected networks no sirve: los runners de GitHub cambian de IP).
 5. **Data protection**: ✅ *Enable versioning for blobs*.
@@ -300,7 +302,7 @@ Para **cada** rol: portal → **Subscriptions** → tu suscripción → **Access
 Pulsa **Review + assign** en cada una. Comprueba en la pestaña **Role assignments** que aparecen las dos.
 
 > [!TIP]
-> **Contributor** crea recursos; **Storage Blob Data Contributor** permite leer/escribir el *estado* de Terraform y subir el *sitio*, porque la cuenta no tiene llaves de acceso. Son permisos de **datos**, distintos de los de gestión.
+> **Contributor** crea recursos; **Storage Blob Data Contributor** permite leer/escribir el *estado* de Terraform en una cuenta sin llaves de acceso. Son permisos de **datos**, distintos de los de gestión.
 
 ### 🅳 Paso 4 · Variables del repositorio en GitHub
 
@@ -315,7 +317,7 @@ En tu repo: **Settings → Secrets and variables → Actions → pestaña Variab
 | `TFSTATE_STORAGE_ACCOUNT` | Nombre de la cuenta `sttf…` | Paso 1.2 |
 | `TFSTATE_CONTAINER` | `tfstate` | Paso 1.7 |
 | `NOMBRE_APP` | `<NOMBREAPP>` | Paso 1.2 |
-| `UBICACION` | `eastus2` | Región |
+| `UBICACION` | `centralus` | Región de la Web App (ver aviso de cuota abajo) |
 | `ETIQUETAS_EXTRA` *(opcional)* | `{}` | Etiquetas JSON para todos los recursos |
 
 <details>
@@ -472,9 +474,9 @@ En tu repo: **Actions** → en la barra izquierda **`03 · Infra · desplegar (d
 
 | Job | Qué hace | Qué revisar |
 |---|---|---|
-| `dev / Planificar` | `terraform plan` guardado como artefacto | Abre el job → **Summary**: `3 to add` |
-| `dev / Aplicar` | `apply` del **plan guardado** | La URL del sitio en el *Summary* |
-| `prod / Planificar` | Plan de prod | Réplica **GRS** y versionado |
+| `dev / Planificar` | `terraform plan` guardado como artefacto | Abre el job → **Summary**: `3 to add` (grupo, plan y Web App) |
+| `dev / Aplicar` | `apply` del **plan guardado** | La URL de la app en el *Summary* |
+| `prod / Planificar` | Plan de prod | Plan **P0v3** en lugar de B1 |
 | `prod / Aplicar` | Espera tu **aprobación** | Banner amarillo **Review deployments** |
 
 **Aprobar prod:** en la página del run pulsa **Review deployments** → marca ☑️ **prod** → (comentario opcional) → **Approve and deploy**.
@@ -485,11 +487,11 @@ En tu repo: **Actions** → en la barra izquierda **`03 · Infra · desplegar (d
 
 | Job | Qué hace | Qué revisar |
 |---|---|---|
-| `Construir y probar` | `npm test` + `npm run build`, sube el artefacto `sitio-web` | Al final de la página del run, sección **Artifacts** |
-| `dev / Publicar` | Localiza el sitio, escribe `config.json`, sube a `$web`, **prueba de humo** | La URL aparece en el recuadro del job |
+| `Construir y probar` | `dotnet test` + `dotnet publish`, estampa versión y commit, sube el artefacto `app-web` (un `.zip`) | Al final de la página del run, sección **Artifacts** |
+| `dev / Publicar` | Localiza la Web App, hace `az webapp deploy` del `.zip`, **prueba de humo** sobre `/api/info` y `/health` | La URL aparece en el recuadro del job |
 | `prod / Publicar` | Espera tu **aprobación** | **Review deployments** |
 
-Aprueba `prod` y abre las dos URLs: están en el *Summary* del run y en la página principal del repo, **Environments** (columna derecha). Cada página muestra su **ambiente, versión y commit**, escritos por el pipeline.
+Aprueba `prod` y abre las dos URLs: están en el *Summary* del run y en la página principal del repo, **Environments** (columna derecha). Cada página muestra su **ambiente** (viene de Terraform), **versión y commit** (los estampa el pipeline al construir), **runtime** y hora de inicio.
 
 <details>
 <summary>💻 <b>Con terminal</b></summary>
@@ -510,10 +512,12 @@ gh run watch -R MI-ORG/TU-REPO
 | **Dos pipelines separados** | Un cambio de CSS no ejecuta Terraform; un cambio de infraestructura no republica la web. Menos riesgo, menos espera y revisores distintos (ver `CODEOWNERS`) |
 | **Un workflow reutilizable por pipeline** (`infra-ambiente.yml`, `app-ambiente.yml`) | dev y prod se despliegan **idéntico**; no hay dos copias que diverjan |
 | **`concurrency` separada** (`infra-desplegar` / `app-desplegar`) | Un despliegue de app no espera a uno de infraestructura, pero nunca hay dos `apply` a la vez |
-| **Artefacto único `sitio-web`** | Se construye una vez; lo que probaste en dev es lo que llega a prod |
+| **Artefacto único `app-web`** | Se construye una vez; lo que probaste en dev es lo que llega a prod |
 | **`concurrency` sin cancelar** | Nunca se interrumpe un `apply` a la mitad |
 | **Estado por ambiente** (`dev.tfstate`, `prod.tfstate`) | Destruir dev no toca prod |
-| **Storage sin llaves** (`shared_access_key_enabled = false`) | Se publica con la identidad OIDC; no existe una llave que filtrar |
+| **Sin credenciales de publicación** (`*_basic_authentication_enabled = false`) | Se despliega con la identidad OIDC; no existe un perfil de publicación que filtrar |
+| **`AMBIENTE` como *app setting*** | La configuración por ambiente vive en Terraform; el paquete no cambia |
+| **`health_check_path = /health`** | App Service saca de rotación una instancia que no responde |
 
 > [!IMPORTANT]
 > 🏢 Si tu organización exige acciones **fijadas por SHA**, reemplaza `@v7` por el SHA de 40 caracteres: `gh api repos/actions/checkout/git/ref/tags/v7 --jq .object.sha`. Dependabot (ya configurado) mantiene también esos SHA.
@@ -531,7 +535,7 @@ El ciclo diario: pides un cambio a Copilot, abres un PR, lees el **plan** y hace
 ### 🤖 Paso 1 · Un cambio de aplicación
 
 ```text
-En app/src/index.html cambia el precio de la bicicleta eléctrica de $550 a $600
+En src/ContosoBiker.Web/wwwroot/index.html cambia el precio de la bicicleta eléctrica de $550 a $600
 por día. No toques nada más.
 ```
 
@@ -546,7 +550,7 @@ local.etiquetas. Mantén el formato de terraform fmt.
 
 **Opción A · Editar a mano, con Copilot al lado**
 
-1. En tu repo abre el archivo (p. ej. `app/src/index.html`) → lápiz ✏️.
+1. En tu repo abre el archivo (p. ej. `src/ContosoBiker.Web/wwwroot/index.html`) → lápiz ✏️.
 2. Haz el cambio. En el editor puedes abrir el **chat de Copilot** (icono ✨ arriba a la derecha) y pegar el prompt del paso 1 o 2.
 3. **Commit changes…** → elige **Create a new branch for this commit and start a pull request** → nombre `feature/mi-cambio` → **Propose changes**.
 4. En la pantalla siguiente pulsa **Create pull request**.
@@ -584,13 +588,13 @@ gh pr create --fill --base main
 | **Reviewers → Copilot** (columna derecha del PR) | Pídele que revise el PR |
 
 > [!WARNING]
-> **Lee el plan siempre.** Un cambio de una línea puede decir `-/+ destroy and then create replacement`. Esa es la señal de que se **recrearía** un recurso (y en Storage, perdería datos). Para eso existe el comentario en el PR.
+> **Lee el plan siempre.** Un cambio de una línea puede decir `-/+ destroy and then create replacement`. Esa es la señal de que se **recrearía** un recurso (y con una base de datos, perderías datos). Para eso existe el comentario en el PR.
 
 Pulsa **Squash and merge** y **Delete branch**. Cada cambio lanza **solo su pipeline** (gracias a los filtros `paths`):
 
 | Cambiaste | Se lanza | No se lanza |
 |---|---|---|
-| `app/**` (el precio) | `04 · App` → dev solo; prod cuando apruebes | `03 · Infra` |
+| `src/**` (el precio) | `04 · App` → dev solo; prod cuando apruebes | `03 · Infra` |
 | `infra/**` (la etiqueta) | `03 · Infra` → dev solo; prod cuando apruebes | `04 · App` |
 
 Refresca las URLs: el precio y la **versión** (`1.0.N`) cambiaron. Si cambiaste ambos en un mismo PR, corren los dos, en paralelo.
@@ -603,13 +607,13 @@ Refresca las URLs: el precio y la **versión** (`1.0.N`) cambiaron. Si cambiaste
 
 ### 💥 Prueba A · Que el escáner de seguridad te frene
 
-En GitHub abre `infra/modules/sitio-web/main.tf`, pulsa el lápiz ✏️ y cambia `min_tls_version = "TLS1_2"` a `"TLS1_0"`. Elige **Create a new branch and start a pull request**.
+En GitHub abre `infra/modules/web-app/main.tf`, pulsa el lápiz ✏️ y cambia `minimum_tls_version = "1.2"` a `"1.0"`. Elige **Create a new branch and start a pull request**.
 
-`Formato, validación y seguridad` falla ❌ con `CKV_AZURE_44`. El error llegó **antes** de tocar Azure. Usa el botón **Explain error** de Copilot, revierte y sigue.
+`Formato, validación y seguridad` falla ❌ con `CKV_AZURE_15`. El error llegó **antes** de tocar Azure. Usa el botón **Explain error** de Copilot, revierte y sigue.
 
 ### 💥 Prueba B · Que una prueba falle
 
-En una rama nueva, edita `app/src/index.html` desde el navegador y borra `id="dato-commit"`. `Construir y probar` falla: la prueba comprueba que existan los elementos que el pipeline rellena.
+En una rama nueva, edita `src/ContosoBiker.Web/wwwroot/index.html` desde el navegador y borra `id="dato-commit"`. `Construir y probar` falla: una prueba xUnit comprueba que existan los elementos que rellena el script.
 
 ### 💥 Prueba C · Drift
 
@@ -633,7 +637,7 @@ gh workflow run 06-deteccion-drift.yml -R MI-ORG/TU-REPO
 | checkov (02) | Configuración **insegura** |
 | `plan` en el PR (02) | Efectos **reales** en Azure, antes del merge |
 | Aprobador en prod | Un humano decide el último paso |
-| Prueba de humo | El despliegue "terminó" pero **el sitio no responde** |
+| Prueba de humo | El despliegue "terminó" pero **la app no responde** |
 | Drift (05) | Cambios manuales fuera del código |
 
 ---
@@ -667,7 +671,8 @@ az ad app delete --id <AZURE_CLIENT_ID>
 
 </details>
 
-Coste aproximado del taller: **céntimos** (Storage estándar, sin cómputo).
+> [!WARNING]
+> A diferencia de Storage, **App Service cobra por hora mientras el plan exista**, aunque nadie visite la app. Aproximado: B1 ≈ 13 USD/mes y P0v3 ≈ 60 USD/mes (consulta la [calculadora](https://azure.microsoft.com/pricing/calculator/)). Destruye los ambientes al terminar el taller.
 
 ---
 
@@ -678,14 +683,15 @@ Coste aproximado del taller: **céntimos** (Storage estándar, sin cómputo).
 | `AADSTS700213: No matching federated identity record … subject 'repo:ORG@id/REPO@id:…'` | La credencial federada no coincide con el subject real | Copia el subject exacto del error y edítalo en **Entra ID → App registrations → Certificates & secrets → Federated credentials** (o repite el script, que lo detecta solo) |
 | `AADSTS700213 … environment:prod` | Falta la credencial del entorno o el job no declara `environment:` | Revisa que existan las 4 credenciales y el nombre del entorno |
 | El primer run falla justo al crear el repo | Aún no existen las variables ni la identidad de Azure | Es normal. Completa los Módulos 1 y 2 y relánzalo con **Re-run all jobs** |
-| `No hay sitio en rg-…` al desplegar la app | La infraestructura aún no existe en ese ambiente | Ejecuta primero `03 · Infra · desplegar` |
+| `No hay Web App en rg-…` al desplegar la app | La infraestructura aún no existe en ese ambiente | Ejecuta primero `03 · Infra · desplegar` |
 | `Saved plan is stale` | El estado de Azure cambió entre el plan y el apply | Relanza el workflow: genera un plan nuevo |
 | `Error: Failed to get existing workspaces … 403` | Falta `Storage Blob Data Contributor` o aún no propagó | Espera 1–2 min y relanza |
 | `request may be blocked by network rules` / `RequestDisallowedByPolicy` | Una *Azure Policy* bloquea la red pública o falta una etiqueta | Mira [Módulo 1](#1️⃣-módulo-1--conectar-github-con-azure-sin-secretos-oidc) (aviso de política) |
 | El job de `prod` queda "Waiting" | Espera tu aprobación | **Review deployments** en la página del run |
 | `Repository not found` al hacer push | git usa otra cuenta | `gh auth setup-git` / `gh auth switch` |
-| El nombre de cuenta de Storage ya existe | Los nombres son globales | Cambia `NOMBRE_APP` y repite el bootstrap |
-| La URL del sitio da `ResourceNotFound` unos segundos | El endpoint tarda en activarse | La prueba de humo **reintenta** hasta 2 min |
+| `Operation cannot be completed without additional quota` al aplicar | La suscripción no tiene cuota de App Service en esa región/SKU | Cambia la variable `UBICACION` a otra región (p. ej. `centralus`, `westus3`) o pide cuota en **Subscriptions → Usage + quotas**. En dev puedes bajar `sku_plan` en `dev.tfvars` |
+| El nombre de la Web App ya existe | Los nombres son globales (`*.azurewebsites.net`) | Cambia `NOMBRE_APP` y repite el bootstrap |
+| La URL da `503` o la página de bienvenida de App Service justo después de desplegar | Arranque en frío de .NET | La prueba de humo **reintenta** hasta 5 min |
 
 ---
 
@@ -695,7 +701,7 @@ Coste aproximado del taller: **céntimos** (Storage estándar, sin cómputo).
 |---|---|
 | **Duración** | ~2 h con la UI. Para ir más rápido, usa el atajo con script del Módulo 1. Si falta tiempo: omite el Módulo 3 y la Prueba C |
 | **Antes de la sesión** | Cada asistente debe tener suscripción con **Owner** y poder crear apps en Entra ID. Pide que ejecuten el Módulo 0 antes |
-| **Cuello de botella** | El primer `apply` tarda ~2 min (crear Storage) y el de prod con GRS, un poco más. Aprovecha para explicar el diagrama |
+| **Cuello de botella** | El primer `apply` tarda ~3-4 min (plan + Web App) y el despliegue de la app ~2 min por el arranque en frío. Aprovecha para explicar el diagrama |
 | **Cuidado con** | Aprobar `prod` desde **otra** cuenta si activas *Prevent self-review* |
 | **Validado** | El flujo completo se ejecutó de punta a punta: bootstrap (script; los pasos de la UI replican lo mismo), CI, plan en PR, apply dev, aprobación, apply prod, prueba de humo, ruleset y merge por PR |
 
@@ -703,7 +709,8 @@ Coste aproximado del taller: **céntimos** (Storage estándar, sin cómputo).
 
 - [OIDC con Azure en GitHub Actions](https://docs.github.com/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-azure)
 - [Proveedor azurerm](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs)
-- [Static website en Azure Storage](https://learn.microsoft.com/azure/storage/blobs/storage-blob-static-website)
+- [Azure App Service para Linux](https://learn.microsoft.com/azure/app-service/overview)
+- [Desplegar un .zip con `az webapp deploy`](https://learn.microsoft.com/azure/app-service/deploy-zip)
 - [Taller de fundamentos (este es su continuación)](https://github.com/JordanReyesLeger/github-workflows-workshop-fundamentos-enterprise)
 
 <div align="center">

@@ -20,7 +20,7 @@ env:
   TFSTATE_CONTAINER: ${{ vars.TFSTATE_CONTAINER }}
   TF_VAR_suscripcion_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
   TF_VAR_nombre_app: ${{ vars.NOMBRE_APP || 'contosobiker' }}
-  TF_VAR_ubicacion: ${{ vars.UBICACION || 'eastus2' }}
+  TF_VAR_ubicacion: ${{ vars.UBICACION || 'centralus' }}
   TF_VAR_etiquetas_extra: ${{ vars.ETIQUETAS_EXTRA || '{}' }}
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
