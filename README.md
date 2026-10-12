@@ -97,6 +97,8 @@ flowchart TB
 
 > [!IMPORTANT]
 > **El orden importa la primera vez:** primero la infraestructura (03), luego la aplicación (04). Si despliegas la app sin infraestructura, el pipeline falla con un mensaje claro: *"No hay Web App en rg-…. Ejecuta primero 03"*.
+>
+> Lo mismo ocurre si un PR cambia **a la vez** infraestructura y aplicación: al hacer merge arrancan 03 y 04 en paralelo y 04 puede fallar porque la Web App aún no existe. Cuando 03 termine, usa **Re-run failed jobs** en 04. Si no cambia el recurso, no pasa nada.
 
 ```text
 .
